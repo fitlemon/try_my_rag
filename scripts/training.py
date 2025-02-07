@@ -51,20 +51,46 @@ corpus = dict(zip(map(str, range(len(corpus))), corpus))  # Our corpus (cid => d
 queries = dict(
     zip(map(str, range(len(queries))), queries)
 )  # Our queries (qid => question)
+# --- Step 1: Deduplicate the corpus ---
 
-# relevant docs as indexes of list
-relevant_docs = {}
-for qid, corpus_id in zip(queries.keys(), corpus.keys()):
-    relevant_docs[qid] = {corpus_id}
+# This dictionary will help us check if a text has been seen before.
+seen_texts = {}
 
+# new_corpus will hold the deduplicated texts with new document IDs.
+new_corpus = {}
+
+# This dictionary maps old corpus IDs to the new corpus IDs.
+old_to_new = {}
+
+new_id = 0
+for old_id, text in corpus.items():
+    if text in seen_texts:
+        # If this text is a duplicate, map the old ID to the existing new ID.
+        old_to_new[old_id] = seen_texts[text]
+    else:
+        # Otherwise, add the text as a new entry.
+        new_id_str = str(new_id)
+        new_corpus[new_id_str] = text
+        seen_texts[text] = new_id_str
+        old_to_new[old_id] = new_id_str
+        new_id += 1
+
+print(f"Original corpus size: {len(corpus)}")
+print(f"Deduplicated corpus size: {len(new_corpus)}")
+
+# --- Step 2: Update the relevant docs mapping ---
+
+new_relevant_docs = {}
+for qid in queries.keys():
+    new_relevant_docs[qid] = {old_to_new[qid]}
 
 matryoshka_evaluators = []
 # Iterate over the different dimensions
 for dim in matryoshka_dimensions:
     ir_evaluator = InformationRetrievalEvaluator(
         queries=queries,
-        corpus=corpus,
-        relevant_docs=relevant_docs,
+        corpus=new_corpus,
+        relevant_docs=new_relevant_docs,
         name=f"dim_{dim}",
         truncate_dim=dim,  # Truncate the embeddings to a certain dimension
         score_functions={"cosine": cos_sim},
